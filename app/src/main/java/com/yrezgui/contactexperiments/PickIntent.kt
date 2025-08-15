@@ -5,18 +5,23 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.ContactsContract
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts.PickContact
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -47,12 +52,7 @@ data class PickContactDetails(
 class CustomPickContact : ActivityResultContract<Uri, Uri?>() {
     override fun createIntent(context: Context, input: Uri): Intent {
         return Intent(Intent.ACTION_PICK)
-            .setDataAndType(
-                ContactsContract.Contacts.CONTENT_URI,
-                ContactsContract.Contacts.CONTENT_TYPE
-//                        ContactsContract.Contacts.CONTENT_ITEM_TYPE
-//                        ContactsContract.Contacts.CONTENT_VCARD_TYPE
-            )
+            .setData(ContactsContract.Contacts.CONTENT_URI)
             .setData(input)
     }
 
@@ -66,6 +66,7 @@ class CustomPickContact : ActivityResultContract<Uri, Uri?>() {
 fun PickIntent() {
     val coroutine = rememberCoroutineScope()
     val contentResolver = LocalContext.current.contentResolver
+    var selectedDataType by remember { mutableStateOf(ContactDataType.Phone) }
     var selectedContact by remember { mutableStateOf<PickContactDetails?>(null) }
 
     val pickContact = rememberLauncherForActivityResult(CustomPickContact()) { contactUri ->
@@ -82,6 +83,9 @@ fun PickIntent() {
                 if (cursor.count == 0) return@launch
                 cursor.moveToFirst()
 
+                val data = cursor.getAllData()
+                Log.d("PickIntent", "Contact Uri: $contactUri")
+                Log.d("PickIntent", "Contact Data: $data")
                 selectedContact = PickContactDetails(contactUri, cursor.getAllData())
             }
         }
@@ -92,7 +96,7 @@ fun PickIntent() {
             TopAppBar(
                 title = { Text(text = "ACTION_PICK") },
                 actions = {
-                    Button(onClick = { pickContact.launch(ContactsContract.CommonDataKinds.Phone.CONTENT_URI) }) {
+                    Button(onClick = { pickContact.launch(selectedDataType.uri) }) {
                         Text("Pick Contact")
                     }
                 }
@@ -101,26 +105,48 @@ fun PickIntent() {
         modifier = Modifier.fillMaxSize()
     ) { innerPadding ->
 
-        selectedContact?.let { details ->
-            Column(
-                modifier = Modifier
-                    .padding(innerPadding)
-                    .fillMaxSize()
-            ) {
-                LazyColumn(modifier = Modifier.weight(1f).padding(16.dp)) {
-                    item {
-                        Text(buildAnnotatedString {
-                            withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
-                                append("Contact Uri: ")
+        LazyColumn(modifier = Modifier
+            .fillMaxSize()
+            .padding(innerPadding)
+            .padding(16.dp)) {
+            item {
+                ListItem(
+                    headlineContent = {
+                        SingleChoiceSegmentedButtonRow {
+                            ContactDataType.entries.forEach { item ->
+                                SegmentedButton(
+                                    shape = SegmentedButtonDefaults.itemShape(
+                                        index = item.ordinal,
+                                        count = ContactDataType.entries.size
+                                    ),
+                                    onClick = { selectedDataType = item },
+                                    selected = item == selectedDataType,
+                                ) {
+                                    Text(item.name)
+                                }
                             }
-                            append(details.contactUri.toString())
-                            appendLine()
-                        })
+                        }
                     }
-                    item {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    }
-                    items(details.data.entries.toList()) {
+                )
+            }
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            }
+            selectedContact?.let { details ->
+                item {
+                    Text(buildAnnotatedString {
+                        withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+                            append("Contact Uri: ")
+                        }
+                        append(details.contactUri.toString())
+                        appendLine()
+                    })
+                }
+                item {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                }
+                items(details.data.entries.toList()) {
+                    SelectionContainer {
                         Text(buildAnnotatedString {
                             withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
                                 append(it.key)
